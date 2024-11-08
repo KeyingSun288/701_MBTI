@@ -1,0 +1,212 @@
+---
+title: "701 Assignment"
+author: "Chaewon Jeong"
+date: "`r Sys.Date()`"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# install.packages("ggpubr")
+# install.packages("countrycode")
+
+library(here)
+library(tidyverse)
+library(ggpubr)
+library(countrycode)
+```
+
+
+```{r import, message=FALSE}
+# Import datasets and pre-process
+mbti <- read_csv(here("countries.csv"))
+  # MBTI processing 1: change space to underbar
+  # MBTI processing 2: Change column header: dash to underbar
+  mbti <- mbti |> 
+    rename_with(~ str_replace_all(., "-", "_")) |> 
+    arrange(Country)
+
+happy <- read_csv(here("world-happiness-report-2021.csv"))
+  # Happy processing 1: change space to underbar
+  # Happy processing 2: Order the country alphabetically
+  happy <- happy |> 
+    rename_with(~ str_replace_all(., " ", "_")) |> 
+    arrange(Country_name)
+
+literacy <- read_csv(here("Literacy Rate.csv"))
+  # Literacy processing 1: change space to underbar
+  # Literacy processing 2: Order the country alphabetically
+  literacy <- literacy |> 
+    rename_with(~ str_replace_all(., " ", "_")) |> 
+    arrange(Country)
+  
+job <- read_csv(here("data.csv"))
+
+gdp <- read_csv(here("GDPINT.csv"))
+
+crime <- read_csv(here("crime.csv"))
+
+```
+
+
+```{r clean, include = FALSE}
+# Check there are no duplicate ->> Deleted duplicate Zimbabwe in literacy dataset
+length(mbti |> pull(Country) |> unique()) == nrow(mbti)
+length(happy |> pull(Country_name) |> unique()) == nrow(happy)
+length(literacy |> pull(Country) |> unique()) == nrow(literacy)
+  duplicated(literacy$Country) #The last row (Zimbabwe) is duplicate 
+  literacy <- literacy[1:174, ] #Remove the row
+  length(literacy |> pull(Country) |> unique()) == nrow(literacy) #Verified no duplicate
+length(job |> pull(COUNTRY) |> unique()) == nrow(job)
+length(gdp |> pull(Country) |> unique()) == nrow(gdp)
+length(crime |> pull(country) |> unique()) == nrow(crime)
+
+# Check there are no missing values ->> Missing values in GDP, will check again after merge
+sum(is.na(mbti))
+sum(is.na(happy))
+sum(is.na(literacy))
+sum(is.na(job$COUNTRY))
+sum(is.na(job$AVG_JOB_SATISFACTION))
+sum(is.na(gdp$Country))
+sum(is.na(gdp$GDP.2021))
+sum(is.na(gdp$GDP.2022))
+sum(is.na(gdp$GDP.2023))
+sum(is.na(crime$country))
+
+# Check whether the countries are named differently between datasets
+# Use countrycode function to assign the uniform countryname
+# For GDP, GDP has more comprehensive country names, change column name
+mbti <- mbti |> 
+  mutate(country_key = countrycode(mbti$Country, "country.name", "iso3c")) |> 
+  relocate(country_key, .after = Country)
+happy <- happy |> 
+  mutate(country_key = countrycode(happy$Country_name, "country.name", "iso3c")) |> 
+  relocate(country_key, .after = Country_name)
+literacy <- literacy |> 
+  mutate(country_key = countrycode(literacy$Country, "country.name", "iso3c")) |> 
+  relocate(country_key, .after = Country)
+job <- job |> 
+  mutate(country_key = countrycode(job$COUNTRY, "country.name", "iso3c")) |> 
+  relocate(country_key, .after = COUNTRY)
+gdp <- gdp |> 
+  rename(country_key = ...2 )
+crime <- crime |> 
+  mutate(country_key = countrycode(crime$country, "country.name", "iso3c")) |> 
+  relocate(country_key, .after = country)
+
+# Confirm if there is any NA value ->> Kosovo is only in happy dataset
+# We will extract countries that are icluded in all datasets, so delete the Kosovo row
+mbti$Country[is.na(mbti$country_key) == 1]
+happy$Country_name[is.na(happy$country_key) == 1]
+  happy <- happy |> 
+    filter(Country_name != "Kosovo") # delete Kosovo
+  happy$Country_name[is.na(happy$country_key) == 1] # double check
+literacy$Country[is.na(literacy$country_key) == 1]
+job$COUNTRY[is.na(job$country_key) == 1]
+gdp$Country[is.na(job$country_key) == 1]
+crime$country[is.na(crime$country_key) == 1]
+
+```
+
+
+
+```{r reorganize and merge}
+# Reorganize mbti dataset
+  # Make mbti into pivot
+  mbti_wide <- mbti |> 
+    pivot_longer(cols = "ESTJ_A":"INFJ_A",
+                 names_to = "Category",
+                 values_to = "Value")
+  
+  # Divide category specifically 
+  mbti_wide <- mbti_wide |> 
+    mutate(E_flag = if_else(substr(Category, 1, 1)=="E", 1, 0),
+           S_flag = if_else(substr(Category, 2, 2)=="S", 1, 0),
+           T_flag = if_else(substr(Category, 3, 3)=="T", 1, 0),
+           J_flag = if_else(substr(Category, 4, 4)=="J", 1, 0),
+           A_flag = if_else(substr(Category, 6, 6)=="A", 1, 0))
+  
+  mbti_summary <- mbti_wide |> 
+    group_by(country_key) |> 
+    summarise(
+      E_prop = sum(Value[E_flag == 1]),
+      S_prop = sum(Value[S_flag == 1]),
+      T_prop = sum(Value[T_flag == 1]),
+      J_prop = sum(Value[J_flag == 1]),
+      A_prop = sum(Value[A_flag == 1])
+    )
+
+# Reorganize happy dataset: Select only the relevant column in the dataset
+happy_summary <- happy |> 
+  select(country_key, Ladder_score)
+
+# Reorganize literacy dataset: Select only the relevant column in the dataset
+literacy_summary <- literacy |> 
+  select(country_key, Literacy_Rate)
+  
+# Reorganize job dataset: Select only the relevant column in the dataset
+job_summary <- job |> 
+  select(country_key, AVG_JOB_SATISFACTION)
+
+# Reorganize gdp dataset: Select only the relevant column in the dataset
+gdp_summary <- gdp |> 
+  select(country_key, GDP.2022)
+
+# Reorganize crime dataset: Select only the relevant column in the dataset
+crime_summary <- crime |> 
+  select(country_key, crimeIndex)
+
+# Merge datasets
+all_data <- list(mbti_summary, happy_summary, literacy_summary, gdp_summary, crime_summary) #, job_summary to be included
+mbti_country <- reduce(all_data, inner_join, by = "country_key")
+mbti_country <- mbti_country |> 
+  mutate(country = countrycode(mbti_country$country_key, "iso3c", "country.name")) |> 
+  relocate(country, .before = country_key)
+mbti_country
+```
+
+```{R plot}
+# Examine normality
+# Create blank data frame
+normality <- data.frame(
+  variable = character(0),
+  normality = character(0)
+)
+for(i in 3:ncol(mbti_country)){
+  test <- shapiro.test(mbti_country[[i]])
+  test_result <- ifelse(test$p.value > 0.05, "Normal", "Not normal")
+  normality <- rbind(normality, data.frame(
+    variable = colnames(mbti_country[i]),
+    normality = test_result
+  ))
+}
+print(normality)
+mbti_country_df <- as.data.frame(mbti_country)
+# Draw graph with correlation
+
+for(j in 8:ncol(mbti_country_df)){
+  for(i in 3:7){
+    if(normality[i-2, 2] == "Normal" & normality[j-2, 2] == "Normal"){
+      cor_method <- "pearson"  
+    } else {
+      cor_method <- "spearman"
+    }
+    
+    graph <- ggplot(mbti_country_df, aes(x = .data[[colnames(mbti_country_df)[i]]], 
+                                         y = .data[[colnames(mbti_country_df)[j]]])) +
+      geom_point() +
+      geom_smooth(method = "lm", color = "blue", se = FALSE) +
+      labs(
+        title = paste0("Correlation between ", colnames(mbti_country_df)[i], " and ",
+                       colnames(mbti_country_df)[j], " using ", cor_method, " method"),
+        x = colnames(mbti_country_df)[i],
+        y = colnames(mbti_country_df)[j]
+      ) +
+      theme_minimal() +
+      stat_cor(method = cor_method)
+    print(graph)
+  }
+}
+```
+
+

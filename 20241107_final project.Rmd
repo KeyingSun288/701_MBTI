@@ -209,4 +209,35 @@ for(j in 8:ncol(mbti_country_df)){
 }
 ```
 
+``` {r HeatMap_Keying}
+
+# gdp
+gdp_data <- data.frame(
+  Country = mbti_country_df$country, # Include all 126 countries
+  GDP_Sum = mbti_country_df$GDP.2022)
+gdp_data
+
+gdp_wm <- joinCountryData2Map(gdp_data, joinCode = "NAME", nameJoinColumn = "Country")
+
+mapCountryData(gdp_wm, nameColumnToPlot = "GDP_Sum", 
+               mapTitle = "Global Distribution of GDP",
+               colourPalette = "heat", # You can also try palettes like "terrain", "rainbow"
+               oceanCol = "lightblue", # Background color for oceans
+               missingCountryCol = "white")
+
+# sensing
+
+S_data <- data.frame(
+  Country = mbti_country_df$country,
+  S_Sum = mbti_country_df$S_prop)
+S_data
+
+S_wm <- joinCountryData2Map(S_data, joinCode = "NAME", nameJoinColumn = "Country")
+
+mapCountryData(S_wm, nameColumnToPlot = "S_Sum", 
+               mapTitle = "Global Distribution of GDP",
+               colourPalette = "heat", # You can also try palettes like "terrain", "rainbow"
+               oceanCol = "lightblue", # Background color for oceans
+               missingCountryCol = "white")
+
 
